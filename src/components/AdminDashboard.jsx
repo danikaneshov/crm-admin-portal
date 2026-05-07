@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { signOut } from 'firebase/auth';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs, where, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs, where, updateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import * as XLSX from 'xlsx';
 import { Card } from './ui/Card';
@@ -19,6 +19,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const currentOutlet = outlets.find(o => o.slug === company_slug);
   const currentOutletId = currentOutlet ? currentOutlet.id : null;
+
   const [outletSettings, setOutletSettings] = useState({
     baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500,
     item1Name: '', item2Name: ''
@@ -35,13 +36,18 @@ const AdminDashboard = () => {
   const [newEmpPin, setNewEmpPin] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [commissionDrafts, setCommissionDrafts] = useState({});
+  const [baseSalaryDrafts, setBaseSalaryDrafts] = useState({});
   const [savingCommissionEmpId, setSavingCommissionEmpId] = useState(null);
+  const [savingBaseSalaryEmpId, setSavingBaseSalaryEmpId] = useState(null);
   const commissionSaveTimersRef = useRef({});
+  const baseSalarySaveTimersRef = useRef({});
 
   const [selectedEmpReport, setSelectedEmpReport] = useState(null);
 
-  // Настройки маржинальности владельца (Аутсорс)
-  const [ownerProfits, setOwnerProfits] = useState({ hookah: 0, replacement: 0 });
+  // Глобальные значения по умолчанию (если у точки нет своих)
+  const [globalOwnerProfits, setGlobalOwnerProfits] = useState({ hookah: 0, replacement: 0 });
+  const [profitDraft, setProfitDraft] = useState({ hookah: 0, replacement: 0 });
+  const [marginScopeOutlet, setMarginScopeOutlet] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [debugShiftPhoto, setDebugShiftPhoto] = useState(null);
   const [isUploadingPastShift, setIsUploadingPastShift] = useState(false);
@@ -49,11 +55,28 @@ const AdminDashboard = () => {
   // Склад
   const [invMovements, setInvMovements] = useState([]);
   const [invTemplates, setInvTemplates] = useState([]);
-  const [invStandards, setInvStandards] = useState({ coalPerBowl: 5, tobaccoPerBowl: 23, mouthpiecePerBowl: 1 });
+  const [globalInvStandards, setGlobalInvStandards] = useState({ coalPerBowl: 5, tobaccoPerBowl: 23, mouthpiecePerBowl: 1 });
+  const [invStandardsDraft, setInvStandardsDraft] = useState({ coalPerBowl: 5, tobaccoPerBowl: 23, mouthpiecePerBowl: 1 });
+  const [standardsPerOutlet, setStandardsPerOutlet] = useState(false);
   const [invForm, setInvForm] = useState({ type: 'in', item: 'coal', amount: '', cost: '', note: '', templateId: '' });
   const [invCart, setInvCart] = useState([]);
   const [newTemplate, setNewTemplate] = useState({ name: '', item: 'tobacco', amount: '', price: '' });
   const [isSavingInv, setIsSavingInv] = useState(false);
+
+  const effectiveOwnerProfits = useMemo(() => {
+    const o = currentOutlet?.settings?.ownerMargins;
+    if (o && typeof o.hookah === 'number' && typeof o.replacement === 'number') {
+      return { hookah: o.hookah, replacement: o.replacement };
+    }
+    return globalOwnerProfits;
+  }, [currentOutlet, globalOwnerProfits]);
+
+  const effectiveInvStandards = useMemo(() => {
+    const g = globalInvStandards;
+    const o = currentOutlet?.settings?.invStandards;
+    if (!o || typeof o !== 'object') return g;
+    return { ...g, ...o };
+  }, [currentOutlet, globalInvStandards]);
 
   const availableMonths = useMemo(() => {
     const months = new Set();
@@ -145,9 +168,18 @@ const AdminDashboard = () => {
   }, [currentUserUid]);
 
   useEffect(() => {
-    if (currentOutlet) {
-      if (currentOutlet.settings) setOutletSettings(currentOutlet.settings);
-    }
+    if (!currentOutlet?.settings) return;
+    const { ownerMargins, invStandards, ...salaryAndNames } = currentOutlet.settings;
+    setOutletSettings((prev) => ({
+      ...prev,
+      ...salaryAndNames,
+      baseSalary: salaryAndNames.baseSalary ?? prev.baseSalary,
+      partnerBaseSalary: salaryAndNames.partnerBaseSalary ?? prev.partnerBaseSalary,
+      itemCommission: salaryAndNames.itemCommission ?? prev.itemCommission,
+      partnerItemCommission: salaryAndNames.partnerItemCommission ?? prev.partnerItemCommission,
+      item1Name: salaryAndNames.item1Name ?? prev.item1Name,
+      item2Name: salaryAndNames.item2Name ?? prev.item2Name
+    }));
   }, [currentOutlet]);
 
   useEffect(() => {
@@ -170,11 +202,11 @@ const AdminDashboard = () => {
     });
 
     const unsubSettings = onSnapshot(doc(db, 'settings', 'profits'), (docSnap) => {
-      if (docSnap.exists()) setOwnerProfits(docSnap.data());
+      if (docSnap.exists()) setGlobalOwnerProfits(docSnap.data());
     });
 
     const unsubInvStd = onSnapshot(doc(db, 'settings', 'inventory_standards'), (docSnap) => {
-      if (docSnap.exists()) setInvStandards(docSnap.data());
+      if (docSnap.exists()) setGlobalInvStandards(docSnap.data());
     });
 
     const unsubInvMov = onSnapshot(query(collection(db, 'inventory_movements'), where('outletId', '==', currentOutletId)), (snap) => {
@@ -192,13 +224,38 @@ const AdminDashboard = () => {
     return () => { unsubEmp(); unsubSales(); unsubSettings(); unsubInvStd(); unsubInvMov(); unsubInvTemplates(); };
   }, [currentOutletId]);
 
+  useEffect(() => {
+    if (activeTab === 'settings' && subTab === 'margins') {
+      setProfitDraft(effectiveOwnerProfits);
+      setMarginScopeOutlet(!!currentOutlet?.settings?.ownerMargins);
+    }
+  }, [activeTab, subTab, currentOutletId]);
+
+  useEffect(() => {
+    if (activeTab === 'inventory' && subTab === 'standards') {
+      setInvStandardsDraft(effectiveInvStandards);
+      setStandardsPerOutlet(!!currentOutlet?.settings?.invStandards);
+    }
+  }, [activeTab, subTab, currentOutletId]);
+
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
     try {
       if (currentOutletId) {
-        await updateDoc(doc(db, 'outlets', currentOutletId), { settings: outletSettings });
+        const outletRef = doc(db, 'outlets', currentOutletId);
+        await updateDoc(outletRef, {
+          'settings.baseSalary': outletSettings.baseSalary,
+          'settings.partnerBaseSalary': outletSettings.partnerBaseSalary,
+          'settings.itemCommission': outletSettings.itemCommission,
+          'settings.partnerItemCommission': outletSettings.partnerItemCommission,
+          'settings.item1Name': outletSettings.item1Name || '',
+          'settings.item2Name': outletSettings.item2Name || '',
+          'settings.ownerMargins': marginScopeOutlet ? profitDraft : deleteField()
+        });
+        if (!marginScopeOutlet) {
+          await setDoc(doc(db, 'settings', 'profits'), profitDraft);
+        }
       }
-      await setDoc(doc(db, 'settings', 'profits'), ownerProfits);
       alert('Настройки успешно сохранены!');
     } catch (err) { alert('Ошибка сохранения: ' + err.message); }
     finally { setIsSavingSettings(false); }
@@ -229,7 +286,7 @@ const AdminDashboard = () => {
         uploadedImageUrl = cloudData.secure_url;
       }
 
-      const ownerBase = emp.customBaseSalary ? emp.customBaseSalary : outletSettings.baseSalary;
+      const ownerBase = emp.customBaseSalary != null ? emp.customBaseSalary : outletSettings.baseSalary;
       const ic = emp.customItemCommission ?? outletSettings.itemCommission;
 
       let partner = null;
@@ -240,7 +297,7 @@ const AdminDashboard = () => {
       if (debugShift.partnerId) {
         partner = employees.find(e => e.id === debugShift.partnerId);
         if (!partner) throw new Error('Напарник не найден в списке сотрудников');
-        const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
+        const partnerBase = partner.customBaseSalary != null ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
         const partnerCommission = partner.customItemCommission ?? outletSettings.partnerItemCommission;
         
         let targetOwnerTotal = Math.ceil((c1 + c2) / 2);
@@ -323,9 +380,59 @@ const AdminDashboard = () => {
     }, 450);
   };
 
+  const handleBaseSalaryDraftChange = (empId, value) => {
+    setBaseSalaryDrafts((prev) => ({ ...prev, [empId]: value }));
+  };
+
+  const queueBaseSalarySave = (empId, value) => {
+    if (baseSalarySaveTimersRef.current[empId]) {
+      clearTimeout(baseSalarySaveTimersRef.current[empId]);
+    }
+    baseSalarySaveTimersRef.current[empId] = setTimeout(async () => {
+      try {
+        setSavingBaseSalaryEmpId(empId);
+        const trimmed = String(value ?? '').trim();
+        if (trimmed === '') {
+          await updateDoc(doc(db, 'employees', empId), { customBaseSalary: deleteField() });
+        } else {
+          const n = Number(trimmed);
+          if (Number.isNaN(n)) return;
+          await updateDoc(doc(db, 'employees', empId), { customBaseSalary: n });
+        }
+      } catch (err) {
+        alert('Ошибка сохранения оклада: ' + err.message);
+      } finally {
+        setSavingBaseSalaryEmpId(null);
+      }
+    }, 450);
+  };
+
+  const commitBaseSalaryField = (emp) => {
+    const raw = baseSalaryDrafts[emp.id] ?? (emp.customBaseSalary != null ? String(emp.customBaseSalary) : '');
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      if (emp.customBaseSalary == null) return;
+      if (!window.confirm(`Сбросить индивидуальный оклад для ${emp.name}? Будет использоваться базовый оклад точки (${outletSettings.baseSalary} ₸).`)) {
+        setBaseSalaryDrafts((prev) => ({ ...prev, [emp.id]: String(emp.customBaseSalary) }));
+        return;
+      }
+      queueBaseSalarySave(emp.id, '');
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (Number.isNaN(parsed)) return;
+    if (parsed === emp.customBaseSalary) return;
+    if (!window.confirm(`Сохранить оклад ${parsed} ₸ для ${emp.name}?`)) {
+      setBaseSalaryDrafts((prev) => ({ ...prev, [emp.id]: emp.customBaseSalary != null ? String(emp.customBaseSalary) : '' }));
+      return;
+    }
+    queueBaseSalarySave(emp.id, trimmed);
+  };
+
   useEffect(() => {
     return () => {
       Object.values(commissionSaveTimersRef.current).forEach((timerId) => clearTimeout(timerId));
+      Object.values(baseSalarySaveTimersRef.current).forEach((timerId) => clearTimeout(timerId));
     };
   }, []);
 
@@ -373,9 +480,9 @@ const AdminDashboard = () => {
       totalItems: hookahs + replacements,
       shiftsCount,
       hasOpenShift,
-      ownerNetProfit: (hookahs * ownerProfits.hookah) + (replacements * ownerProfits.replacement)
+      ownerNetProfit: (hookahs * effectiveOwnerProfits.hookah) + (replacements * effectiveOwnerProfits.replacement)
     };
-  }, [allShifts, ownerProfits, selectedMonth]);
+  }, [allShifts, effectiveOwnerProfits, selectedMonth]);
 
   // Данные для финансовых отчетов (с учетом выбранного месяца)
   const monthlyStats = useMemo(() => {
@@ -385,14 +492,14 @@ const AdminDashboard = () => {
     const earned = filteredShifts.reduce((a, b) => a + (b.earned || 0), 0);
     const hookahs = filteredShifts.reduce((a, b) => a + (b.items?.cocktail1 || 0), 0);
     const replacements = filteredShifts.reduce((a, b) => a + (b.items?.cocktail2 || 0), 0);
-    const ownerProfit = (hookahs * ownerProfits.hookah) + (replacements * ownerProfits.replacement);
+    const ownerProfit = (hookahs * effectiveOwnerProfits.hookah) + (replacements * effectiveOwnerProfits.replacement);
     
     const purchases = invMovements
       .filter(m => m.type === 'in' && (isAll || (m.dateStr && m.dateStr.endsWith(`.${selectedMonth}`))))
       .reduce((a, b) => a + (b.cost || 0), 0);
 
-    const hookahProfit = hookahs * ownerProfits.hookah;
-    const replacementProfit = replacements * ownerProfits.replacement;
+    const hookahProfit = hookahs * effectiveOwnerProfits.hookah;
+    const replacementProfit = replacements * effectiveOwnerProfits.replacement;
 
     return {
       earned,
@@ -404,7 +511,7 @@ const AdminDashboard = () => {
       purchases,
       netProfit: ownerProfit - earned
     };
-  }, [allShifts, selectedMonth, ownerProfits, invMovements]);
+  }, [allShifts, selectedMonth, effectiveOwnerProfits, invMovements]);
 
   const closedSystemShifts = useMemo(
     () => allShifts.filter(s => s.status === 'closed'),
@@ -422,7 +529,7 @@ const AdminDashboard = () => {
     () => closedSystemShifts.reduce((a, b) => a + (b.items?.cocktail2 || 0), 0),
     [closedSystemShifts]
   );
-  const globalOwnerProfit = (globalHookahs * ownerProfits.hookah) + (globalReplacements * ownerProfits.replacement);
+  const globalOwnerProfit = (globalHookahs * effectiveOwnerProfits.hookah) + (globalReplacements * effectiveOwnerProfits.replacement);
   
   const replacementRate = globalHookahs > 0 ? ((globalReplacements / globalHookahs) * 100).toFixed(1) : 0;
 
@@ -878,13 +985,13 @@ const AdminDashboard = () => {
                   <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col justify-center">
                     <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Прибыль с кальянов</p>
                     <h3 className="text-2xl font-black text-blue-600">{formatMoney(monthlyStats.hookahProfit)} ₸</h3>
-                    <p className="text-slate-400 text-sm mt-1">{monthlyStats.hookahs} шт × {formatMoney(ownerProfits.hookah)} ₸</p>
+                    <p className="text-slate-400 text-sm mt-1">{monthlyStats.hookahs} шт × {formatMoney(effectiveOwnerProfits.hookah)} ₸</p>
                   </div>
 
                   <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex flex-col justify-center">
                     <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Прибыль с замен</p>
                     <h3 className="text-2xl font-black text-indigo-600">{formatMoney(monthlyStats.replacementProfit)} ₸</h3>
-                    <p className="text-slate-400 text-sm mt-1">{monthlyStats.replacements} шт × {formatMoney(ownerProfits.replacement)} ₸</p>
+                    <p className="text-slate-400 text-sm mt-1">{monthlyStats.replacements} шт × {formatMoney(effectiveOwnerProfits.replacement)} ₸</p>
                   </div>
                 </div>
 
@@ -1040,9 +1147,9 @@ const AdminDashboard = () => {
         {/* ВКЛАДКА: СКЛАД */}
         {activeTab === 'inventory' && (() => {
           const totalBowls = closedSystemShifts.reduce((a, s) => a + (s.items?.cocktail1 || 0) + (s.items?.cocktail2 || 0) + (s.staffHookahs || 0), 0);
-          const autoCoalUsed = totalBowls * invStandards.coalPerBowl;
-          const autoTobaccoUsed = totalBowls * (invStandards.tobaccoPerBowl || 0);
-          const autoMouthpieceUsed = totalBowls * (invStandards.mouthpiecePerBowl || 0);
+          const autoCoalUsed = totalBowls * effectiveInvStandards.coalPerBowl;
+          const autoTobaccoUsed = totalBowls * (effectiveInvStandards.tobaccoPerBowl || 0);
+          const autoMouthpieceUsed = totalBowls * (effectiveInvStandards.mouthpiecePerBowl || 0);
 
           const coalIn = invMovements.filter(m => m.item === 'coal' && m.type === 'in').reduce((a, m) => a + (m.amount || 0), 0);
           const tobaccoIn = invMovements.filter(m => m.item === 'tobacco' && m.type === 'in').reduce((a, m) => a + (m.amount || 0), 0);
@@ -1124,8 +1231,20 @@ const AdminDashboard = () => {
 
           const handleSaveStandards = async () => {
             setIsSavingInv(true);
-            try { await setDoc(doc(db, 'settings', 'inventory_standards'), invStandards); alert('Стандарты сохранены!'); }
-            catch (err) { alert('Ошибка: ' + err.message); }
+            try {
+              if (standardsPerOutlet) {
+                if (!currentOutletId) return alert('Нет точки');
+                await updateDoc(doc(db, 'outlets', currentOutletId), {
+                  'settings.invStandards': invStandardsDraft
+                });
+              } else {
+                await setDoc(doc(db, 'settings', 'inventory_standards'), invStandardsDraft);
+                if (currentOutletId) {
+                  await updateDoc(doc(db, 'outlets', currentOutletId), { 'settings.invStandards': deleteField() });
+                }
+              }
+              alert('Стандарты сохранены!');
+            } catch (err) { alert('Ошибка: ' + err.message); }
             finally { setIsSavingInv(false); }
           };
 
@@ -1160,36 +1279,36 @@ const AdminDashboard = () => {
                 <h1 className="text-2xl font-bold text-slate-800">Текущие остатки</h1>
                 <Card variant="gradient" className="p-6 relative">
                   <p className="font-bold text-xs uppercase tracking-widest mb-2 opacity-80">Хватит примерно на</p>
-                  <h3 className="text-3xl font-black text-white">≈ {Math.max(0, Math.floor(Math.min(coalStock / invStandards.coalPerBowl, tobaccoStock / invStandards.tobaccoPerBowl)))} чаш</h3>
-                  <p className="text-xs opacity-70 mt-1 text-white">По стандарту: {invStandards.coalPerBowl} углей + {invStandards.tobaccoPerBowl}г табака на чашу</p>
+                  <h3 className="text-3xl font-black text-white">≈ {Math.max(0, Math.floor(Math.min(coalStock / effectiveInvStandards.coalPerBowl, tobaccoStock / effectiveInvStandards.tobaccoPerBowl)))} чаш</h3>
+                  <p className="text-xs opacity-70 mt-1 text-white">По стандарту: {effectiveInvStandards.coalPerBowl} углей + {effectiveInvStandards.tobaccoPerBowl}г табака на чашу</p>
                 </Card>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Card variant="elevated" className="p-8 card-hover-effect">
                     <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl flex items-center justify-center text-white text-xl">🔥</div><div><p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Уголь</p><h3 className="text-3xl font-black text-slate-900">{formatMoney(Math.round(coalStock))} шт</h3></div></div>
                     <div className="bg-slate-50 p-4 rounded-2xl space-y-2 text-sm border border-slate-100">
                       <div className="flex justify-between"><span className="text-slate-500">Приход (всего):</span><strong className="text-green-600">+{formatMoney(coalIn)}</strong></div>
-                      <div className="flex justify-between"><span className="text-slate-500">Расход (авто, {totalBowls} чаш × {invStandards.coalPerBowl}):</span><strong className="text-red-500">-{formatMoney(autoCoalUsed)}</strong></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Расход (авто, {totalBowls} чаш × {effectiveInvStandards.coalPerBowl}):</span><strong className="text-red-500">-{formatMoney(autoCoalUsed)}</strong></div>
                       <div className="flex justify-between"><span className="text-slate-500">Списано вручную:</span><strong className="text-orange-500">-{formatMoney(coalWriteoff)}</strong></div>
                     </div>
-                    <div className="mt-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-center"><span className="text-blue-600 font-black text-sm">≈ {Math.max(0, Math.floor(coalStock / invStandards.coalPerBowl))} чаш</span></div>
+                    <div className="mt-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-center"><span className="text-blue-600 font-black text-sm">≈ {Math.max(0, Math.floor(coalStock / effectiveInvStandards.coalPerBowl))} чаш</span></div>
                   </Card>
                   <Card variant="elevated" className="p-8 card-hover-effect">
                     <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl flex items-center justify-center text-white text-xl">🍃</div><div><p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Табак</p><h3 className="text-3xl font-black text-slate-900">{formatMoney(Math.round(tobaccoStock))} г</h3></div></div>
                     <div className="bg-slate-50 p-4 rounded-2xl space-y-2 text-sm border border-slate-100">
                       <div className="flex justify-between"><span className="text-slate-500">Приход (всего):</span><strong className="text-green-600">+{formatMoney(tobaccoIn)} г</strong></div>
-                      <div className="flex justify-between"><span className="text-slate-500">Расход (авто, {totalBowls} чаш × {invStandards.tobaccoPerBowl}г):</span><strong className="text-red-500">-{formatMoney(autoTobaccoUsed)} г</strong></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Расход (авто, {totalBowls} чаш × {effectiveInvStandards.tobaccoPerBowl}г):</span><strong className="text-red-500">-{formatMoney(autoTobaccoUsed)} г</strong></div>
                       <div className="flex justify-between"><span className="text-slate-500">Списано вручную:</span><strong className="text-orange-500">-{formatMoney(tobaccoWriteoff)} г</strong></div>
                     </div>
-                    <div className="mt-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-center"><span className="text-blue-600 font-black text-sm">≈ {Math.max(0, Math.floor(tobaccoStock / invStandards.tobaccoPerBowl))} чаш</span></div>
+                    <div className="mt-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-center"><span className="text-blue-600 font-black text-sm">≈ {Math.max(0, Math.floor(tobaccoStock / effectiveInvStandards.tobaccoPerBowl))} чаш</span></div>
                   </Card>
                   <Card variant="elevated" className="p-8 card-hover-effect">
                     <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-xl">💠</div><div><p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Мундштуки</p><h3 className="text-3xl font-black text-slate-900">{formatMoney(Math.round(mouthpieceStock))} шт</h3></div></div>
                     <div className="bg-slate-50 p-4 rounded-2xl space-y-2 text-sm border border-slate-100">
                       <div className="flex justify-between"><span className="text-slate-500">Приход (всего):</span><strong className="text-green-600">+{formatMoney(mouthpieceIn)}</strong></div>
-                      <div className="flex justify-between"><span className="text-slate-500">Расход (авто, {totalBowls} чаш × {invStandards.mouthpiecePerBowl}):</span><strong className="text-red-500">-{formatMoney(autoMouthpieceUsed)}</strong></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Расход (авто, {totalBowls} чаш × {effectiveInvStandards.mouthpiecePerBowl}):</span><strong className="text-red-500">-{formatMoney(autoMouthpieceUsed)}</strong></div>
                       <div className="flex justify-between"><span className="text-slate-500">Списано вручную:</span><strong className="text-orange-500">-{formatMoney(mouthpieceWriteoff)}</strong></div>
                     </div>
-                    <div className="mt-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-center"><span className="text-blue-600 font-black text-sm">≈ {Math.max(0, Math.floor(mouthpieceStock / invStandards.mouthpiecePerBowl))} чаш</span></div>
+                    <div className="mt-3 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 text-center"><span className="text-blue-600 font-black text-sm">≈ {Math.max(0, Math.floor(mouthpieceStock / effectiveInvStandards.mouthpiecePerBowl))} чаш</span></div>
                   </Card>
                 </div>
               </div>
@@ -1371,11 +1490,27 @@ const AdminDashboard = () => {
               <div className="max-w-xl space-y-6">
                 <h1 className="text-2xl font-bold text-slate-800">Стандарты расхода</h1>
                 <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
-                  <p className="text-slate-500 mb-6 text-sm">Укажи сколько ресурсов уходит на 1 чашу. Система автоматически рассчитает расход по продажам.</p>
+                  <p className="text-slate-500 mb-4 text-sm">Укажи сколько ресурсов уходит на 1 чашу. Система автоматически рассчитает расход по продажам.</p>
+                  <label className="flex items-start gap-3 p-4 mb-6 rounded-2xl border border-slate-100 bg-slate-50/80 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded border-slate-300"
+                      checked={standardsPerOutlet}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setStandardsPerOutlet(on);
+                        setInvStandardsDraft(on ? { ...effectiveInvStandards } : { ...globalInvStandards });
+                      }}
+                    />
+                    <span>
+                      <span className="font-bold text-slate-800 block">Свои стандарты только для этой точки</span>
+                      <span className="text-xs text-slate-500">Если выключено — используются общие стандарты из базы (как у всех точек с глобальными настройками).</span>
+                    </span>
+                  </label>
                   <div className="space-y-5">
-                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">🔥 Углей на 1 чашу (шт)</label><input type="number" min="1" value={invStandards.coalPerBowl} onChange={e => setInvStandards({...invStandards, coalPerBowl: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" /></div>
-                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">🍃 Табака на 1 чашу (г)</label><input type="number" min="1" value={invStandards.tobaccoPerBowl} onChange={e => setInvStandards({...invStandards, tobaccoPerBowl: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" /></div>
-                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">💠 Мундштуков на 1 чашу (шт)</label><input type="number" min="0" value={invStandards.mouthpiecePerBowl} onChange={e => setInvStandards({...invStandards, mouthpiecePerBowl: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" /></div>
+                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">🔥 Углей на 1 чашу (шт)</label><input type="number" min="1" value={invStandardsDraft.coalPerBowl} onChange={e => setInvStandardsDraft({...invStandardsDraft, coalPerBowl: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" /></div>
+                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">🍃 Табака на 1 чашу (г)</label><input type="number" min="1" value={invStandardsDraft.tobaccoPerBowl} onChange={e => setInvStandardsDraft({...invStandardsDraft, tobaccoPerBowl: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" /></div>
+                    <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">💠 Мундштуков на 1 чашу (шт)</label><input type="number" min="0" value={invStandardsDraft.mouthpiecePerBowl} onChange={e => setInvStandardsDraft({...invStandardsDraft, mouthpiecePerBowl: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" /></div>
                     <button onClick={handleSaveStandards} disabled={isSavingInv} className="w-full p-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100 disabled:opacity-50">{isSavingInv ? 'Сохранение...' : 'Сохранить стандарты'}</button>
                   </div>
                 </div>
@@ -1420,6 +1555,17 @@ const AdminDashboard = () => {
                           <Trash2 size={18}/>
                         </button>
                       </div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Базовый оклад (₸)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder={String(outletSettings.baseSalary)}
+                        value={baseSalaryDrafts[emp.id] ?? (emp.customBaseSalary != null ? String(emp.customBaseSalary) : '')}
+                        onChange={(e) => handleBaseSalaryDraftChange(emp.id, e.target.value)}
+                        onBlur={() => commitBaseSalaryField(emp)}
+                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                      />
+                      {savingBaseSalaryEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mb-2">Сохранение...</p>}
                       <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Ставка за кальян (₸)</label>
                       <input
                         type="number"
@@ -1445,11 +1591,12 @@ const AdminDashboard = () => {
               </div>
 
               <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full min-w-[720px]">
+              <table className="w-full min-w-[960px]">
                 <thead>
                   <tr className="bg-slate-50">
                     <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Мастер</th>
                     <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">PIN</th>
+                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Базовый оклад (₸)</th>
                     <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Ставка за кальян (₸)</th>
                     <th className="p-6"></th>
                   </tr>
@@ -1459,6 +1606,18 @@ const AdminDashboard = () => {
                     <tr key={emp.id}>
                       <td className="p-6 font-bold text-slate-900">{emp.name}</td>
                       <td className="p-6 font-mono text-slate-500">{emp.pin}</td>
+                      <td className="p-6">
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder={String(outletSettings.baseSalary)}
+                          value={baseSalaryDrafts[emp.id] ?? (emp.customBaseSalary != null ? String(emp.customBaseSalary) : '')}
+                          onChange={(e) => handleBaseSalaryDraftChange(emp.id, e.target.value)}
+                          onBlur={() => commitBaseSalaryField(emp)}
+                          className="w-36 p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {savingBaseSalaryEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
+                      </td>
                       <td className="p-6">
                         {(() => {
                           const persistedValue = emp.customItemCommission ?? outletSettings.itemCommission;
@@ -1517,8 +1676,30 @@ const AdminDashboard = () => {
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Замена (позиция 2)</label><input type="text" value={outletSettings.item2Name || ''} onChange={e=>setOutletSettings({...outletSettings, item2Name: e.target.value})} placeholder="Дымный коктейль 2" className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800" /></div>
 
                   <h3 className="text-lg font-black text-slate-900 mt-8 mb-2 border-t border-slate-100 pt-8">Чистая прибыль аутсорса</h3>
-                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Кальяна (₸)</label><input type="number" value={ownerProfits.hookah} onChange={e=>setOwnerProfits({...ownerProfits, hookah: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
-                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Замены (₸)</label><input type="number" value={ownerProfits.replacement} onChange={e=>setOwnerProfits({...ownerProfits, replacement: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+                  <label className="flex items-start gap-3 p-4 mb-4 rounded-2xl border border-slate-100 bg-slate-50/80 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded border-slate-300"
+                      checked={marginScopeOutlet}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setMarginScopeOutlet(on);
+                        setProfitDraft(on ? { ...effectiveOwnerProfits } : { ...globalOwnerProfits });
+                      }}
+                    />
+                    <span>
+                      <span className="font-bold text-slate-800 block">Своя маржа только для этой точки</span>
+                      <span className="text-xs text-slate-500">Включи, если у этой локации другая чистая прибыль с кальяна/замены. Выключено — сохраняются общие значения для всех точек (глобально).</span>
+                    </span>
+                  </label>
+                  {marginScopeOutlet && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">Редактируешь значения для <strong>{currentOutlet?.name}</strong>. Они не перезапишут глобальные настройки других точек.</p>
+                  )}
+                  {!marginScopeOutlet && outlets.length > 1 && (
+                    <p className="text-xs text-slate-500 mb-4">Сейчас задаёшь общую маржу для всех своих точек. Нужна отдельная — включи переключатель выше.</p>
+                  )}
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Кальяна (₸)</label><input type="number" value={profitDraft.hookah} onChange={e=>setProfitDraft({...profitDraft, hookah: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Замены (₸)</label><input type="number" value={profitDraft.replacement} onChange={e=>setProfitDraft({...profitDraft, replacement: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
                   <button onClick={handleSaveSettings} disabled={isSavingSettings} className="w-full p-4 mt-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100 disabled:opacity-50">{isSavingSettings ? 'Сохранение...' : 'Сохранить настройки'}</button>
                 </div>
               </div></div>

@@ -229,14 +229,14 @@ const AdminDashboard = () => {
       setProfitDraft(effectiveOwnerProfits);
       setMarginScopeOutlet(!!currentOutlet?.settings?.ownerMargins);
     }
-  }, [activeTab, subTab, currentOutletId]);
+  }, [activeTab, subTab, currentOutletId, effectiveOwnerProfits, currentOutlet]);
 
   useEffect(() => {
     if (activeTab === 'inventory' && subTab === 'standards') {
       setInvStandardsDraft(effectiveInvStandards);
       setStandardsPerOutlet(!!currentOutlet?.settings?.invStandards);
     }
-  }, [activeTab, subTab, currentOutletId]);
+  }, [activeTab, subTab, currentOutletId, effectiveInvStandards, currentOutlet]);
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
@@ -1422,7 +1422,7 @@ const AdminDashboard = () => {
                             {m.note && <p className="text-xs text-slate-400">{m.note}</p>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3"><span className="text-xs text-slate-400">{m.dateStr}</span><button onClick={() => deleteDoc(doc(db, 'inventory_movements', m.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button></div>
+                        <div className="flex items-center gap-3"><span className="text-xs text-slate-400">{m.dateStr}</span><button onClick={() => { if (window.confirm('Удалить эту запись прихода?')) deleteDoc(doc(db, 'inventory_movements', m.id)); }} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button></div>
                       </div>
                     ))}
                   </div>
@@ -1452,7 +1452,7 @@ const AdminDashboard = () => {
                     {invTemplates.map(t => (
                       <div key={t.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
                         <div><p className="font-bold text-slate-800">{t.name}</p><p className="text-xs text-slate-400 mt-0.5">{t.item === 'coal' ? 'Уголь' : t.item === 'tobacco' ? 'Табак' : 'Мундштуки'} — {t.amount} {t.item === 'coal' || t.item === 'mouthpiece' ? 'шт' : 'г'}{t.price > 0 ? ` • ${formatMoney(t.price)} ₸` : ''}</p></div>
-                        <button onClick={() => deleteDoc(doc(db, 'inventory_templates', t.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+                        <button onClick={() => { if (window.confirm(`Удалить шаблон "${t.name}"?`)) deleteDoc(doc(db, 'inventory_templates', t.id)); }} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
                       </div>
                     ))}
                   </div>
@@ -1478,7 +1478,7 @@ const AdminDashboard = () => {
                     {invMovements.filter(m => m.type === 'writeoff').map(m => (
                       <div key={m.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
                         <div><p className="font-bold text-slate-800">{m.item === 'coal' ? '🔥 Уголь' : '🍃 Табак'} <span className="text-orange-500">-{formatMoney(m.amount)} {m.item === 'coal' ? 'шт' : 'г'}</span></p>{m.note && <p className="text-xs text-slate-400 mt-0.5">{m.note}</p>}</div>
-                        <div className="flex items-center gap-3"><span className="text-xs text-slate-400">{m.dateStr}</span><button onClick={() => deleteDoc(doc(db, 'inventory_movements', m.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button></div>
+                        <div className="flex items-center gap-3"><span className="text-xs text-slate-400">{m.dateStr}</span><button onClick={() => { if (window.confirm('Удалить эту запись списания?')) deleteDoc(doc(db, 'inventory_movements', m.id)); }} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button></div>
                       </div>
                     ))}
                   </div>
@@ -1551,7 +1551,7 @@ const AdminDashboard = () => {
                           <p className="font-bold text-slate-900">{emp.name}</p>
                           <p className="text-xs text-slate-400 font-mono">PIN: {emp.pin}</p>
                         </div>
-                        <button onClick={() => deleteDoc(doc(db, 'employees', emp.id))} className="text-slate-300 hover:text-red-500">
+                        <button onClick={() => { if (window.confirm(`Удалить сотрудника ${emp.name}? Это необратимо.`)) deleteDoc(doc(db, 'employees', emp.id)); }} className="text-slate-300 hover:text-red-500">
                           <Trash2 size={18}/>
                         </button>
                       </div>
@@ -1648,7 +1648,7 @@ const AdminDashboard = () => {
                         {savingCommissionEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
                       </td>
                       <td className="p-6 text-right">
-                        <button onClick={() => deleteDoc(doc(db, 'employees', emp.id))} className="text-slate-300 hover:text-red-500">
+                        <button onClick={() => { if (window.confirm(`Удалить сотрудника ${emp.name}? Это необратимо.`)) deleteDoc(doc(db, 'employees', emp.id)); }} className="text-slate-300 hover:text-red-500">
                           <Trash2 size={18}/>
                         </button>
                       </td>
@@ -1725,7 +1725,7 @@ const AdminDashboard = () => {
               <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
                 <h3 className="font-bold text-red-800 mb-2">Удалить все смены</h3>
                 <p className="text-sm text-red-600 mb-4">Удалит все записи о сменах из базы данных.</p>
-                <button onClick={async () => { if (window.confirm('Удалить ВСЕ смены?')) { const c = window.prompt('Введите DELETE:'); if (c === 'DELETE') { try { const s = await getDocs(collection(db, 'sales')); await Promise.all(s.docs.map(d => deleteDoc(doc(db, 'sales', d.id)))); alert('Очищено.'); } catch (err) { alert('Ошибка: ' + err.message); } } } }} className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700 transition-colors">Дропнуть таблицу sales</button>
+                <button onClick={async () => { if (window.confirm(`Удалить ВСЕ смены для точки "${currentOutlet?.name}"?`)) { const c = window.prompt('Введите DELETE:'); if (c === 'DELETE') { try { const s = await getDocs(query(collection(db, 'sales'), where('outletId', '==', currentOutletId))); await Promise.all(s.docs.map(d => deleteDoc(doc(db, 'sales', d.id)))); alert(`Очищено ${s.docs.length} записей для этой точки.`); } catch (err) { alert('Ошибка: ' + err.message); } } } }} className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-200 hover:bg-red-700 transition-colors">Дропнуть смены точки</button>
               </div>
             </div>
           </div>

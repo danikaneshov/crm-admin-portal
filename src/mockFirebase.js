@@ -20,12 +20,14 @@ const state = {
   },
   sales: {},
   settings: {
-    'profits': {},
-    'inventory_standards': {}
+    'profits': { hookah: 2000, replacement: 500 },
+    'inventory_standards': { coalPerBowl: 5, tobaccoPerBowl: 20, mouthpiecePerBowl: 1 }
   },
   inventory_movements: {},
   inventory_templates: {
-    'inv_1': { outletId: 'demo_outlet_1', name: 'Musthave', measure: 'грамм', unitCost: 35 }
+    'inv_1': { outletId: 'demo_outlet_1', name: 'Musthave', measure: 'грамм', unitCost: 35 },
+    'inv_2': { outletId: 'demo_outlet_1', name: 'Darkside', measure: 'грамм', unitCost: 40 },
+    'inv_3': { outletId: 'demo_outlet_1', name: 'Уголь 25мм', measure: 'шт', unitCost: 10 }
   }
 };
 
@@ -35,13 +37,18 @@ for (let i = 0; i < 15; i++) {
   d.setDate(d.getDate() - i);
   const dateStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
   const hookahs = Math.floor(Math.random() * 20) + 10;
+  const replacements = Math.floor(Math.random() * 5);
   const id = `sale_${i}`;
   state.sales[id] = {
     outletId: 'demo_outlet_1',
     employeeId: i % 2 === 0 ? 'emp_1' : 'emp_2',
     dateStr,
-    totalItems: hookahs,
-    earned: hookahs * 1500 + 3000,
+    items: { cocktail1: hookahs, cocktail2: replacements },
+    totalItems: hookahs + replacements,
+    baseSalary: 3000,
+    hookahPercentage: (hookahs + replacements) * 1500,
+    earned: (hookahs + replacements) * 1500 + 3000,
+    shiftFraction: 1,
     status: 'closed',
     endTime: { seconds: d.getTime() / 1000 }
   };

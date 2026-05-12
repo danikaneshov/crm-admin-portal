@@ -50,7 +50,7 @@ const OutletSelector = () => {
         <div className="text-center mb-12">
           <div className="inline-block mb-6">
             <span className="text-5xl font-black tracking-tighter text-slate-900">
-              Unitu<span className="text-blue-600">.</span>
+              HookaBase<span className="text-blue-600">.</span>
             </span>
           </div>
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Выберите точку</h1>

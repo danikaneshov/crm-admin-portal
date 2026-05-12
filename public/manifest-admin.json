@@ -1,7 +1,7 @@
 {
-  "name": "Unitu",
-  "short_name": "Unitu Admin",
-  "description": "Unitu — Admin Panel",
+  "name": "HookaBase",
+  "short_name": "HookaBase Admin",
+  "description": "HookaBase — Admin Panel",
   "start_url": "/admin",
   "scope": "/admin",
   "display": "standalone",

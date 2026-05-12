@@ -64,7 +64,7 @@ const AdminLogin = () => {
         
         <div className="text-center mb-8">
           <div className="inline-block bg-blue-50 px-4 py-2 rounded-lg mb-4 border border-blue-100">
-            <span className="font-bold text-xl tracking-wide text-blue-600">Unitu Admin</span>
+            <span className="font-bold text-xl tracking-wide text-blue-600">HookaBase Admin</span>
           </div>
           <h2 className="text-2xl font-semibold text-gray-800">Вход в панель</h2>
         </div>

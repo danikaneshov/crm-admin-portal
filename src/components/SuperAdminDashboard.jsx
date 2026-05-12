@@ -203,7 +203,7 @@ const SuperAdminDashboard = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-              Unitu<span className="text-blue-600">.</span>
+              HookaBase<span className="text-blue-600">.</span>
               <span className="text-slate-400 font-medium text-lg ml-2">Super Admin</span>
             </h1>
           </div>

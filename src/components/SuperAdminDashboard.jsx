@@ -130,54 +130,6 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  const seedDemoData = async () => {
-    if (!window.confirm('Сгенерировать тестовые данные для Демо? (создаст точку, сотрудников и смены)')) return;
-    try {
-      const demoUserUid = prompt('Введите UID пользователя demo@hookabase.com:');
-      if (!demoUserUid) return;
-
-      const demoOutletRef = await addDoc(collection(db, 'outlets'), {
-        ownerUid: demoUserUid,
-        slug: 'demo',
-        name: 'Демо Lounge',
-        address: 'ул. Абая 10, Алматы',
-        connectCode: 'DEMO00',
-        createdAt: new Date(),
-        settings: { baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500 }
-      });
-      const oid = demoOutletRef.id;
-
-      const emps = [{ name: 'Алихан', pin: '1111' }, { name: 'Марат', pin: '2222' }, { name: 'Динара', pin: '3333' }];
-      const empIds = [];
-      for (const e of emps) {
-        const ref = await addDoc(collection(db, 'employees'), { outletId: oid, name: e.name, pin: e.pin, createdAt: new Date() });
-        empIds.push(ref.id);
-      }
-
-      for (let i = 14; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
-        const hookahs = Math.floor(Math.random() * 20) + 10;
-        await addDoc(collection(db, 'sales'), {
-          outletId: oid,
-          employeeId: empIds[i % 3],
-          partnerId: '',
-          dateStr,
-          totalItems: hookahs,
-          earned: hookahs * 1500 + 3000,
-          status: 'closed',
-          endTime: new Date(d.setHours(23, 59, 59))
-        });
-      }
-
-      pushToast('Демо-данные успешно созданы!', 'success');
-    } catch(e) {
-      console.error(e);
-      pushToast(`Ошибка: ${e.message}`, 'error');
-    }
-  };
-
   const runMigration = async () => {
     if (!window.confirm('Привязать старые данные к точке?')) return;
     const oid = prompt('ID точки:');
@@ -234,13 +186,12 @@ const SuperAdminDashboard = () => {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`px-4 py-3 rounded-xl shadow-lg text-sm font-bold border ${
-              t.type === 'success'
+            className={`px-4 py-3 rounded-xl shadow-lg text-sm font-bold border ${t.type === 'success'
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : t.type === 'error'
                   ? 'bg-red-50 text-red-700 border-red-200'
                   : 'bg-slate-50 text-slate-700 border-slate-200'
-            }`}
+              }`}
           >
             {t.message}
           </div>
@@ -287,9 +238,8 @@ const SuperAdminDashboard = () => {
             <button
               key={tab.key}
               onClick={() => setActiveSection(tab.key)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeSection === tab.key ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeSection === tab.key ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                }`}
             >
               <tab.icon size={16} />
               {tab.label}
@@ -414,12 +364,12 @@ const SuperAdminDashboard = () => {
                       /* Режим редактирования */
                       <div className="space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <input type="text" value={editingOutlet.name} onChange={e => setEditingOutlet({...editingOutlet, name: e.target.value})} placeholder="Название" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-                          <input type="text" value={editingOutlet.slug} onChange={e => setEditingOutlet({...editingOutlet, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})} placeholder="slug" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                          <input type="text" value={editingOutlet.name} onChange={e => setEditingOutlet({ ...editingOutlet, name: e.target.value })} placeholder="Название" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                          <input type="text" value={editingOutlet.slug} onChange={e => setEditingOutlet({ ...editingOutlet, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} placeholder="slug" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <input type="text" value={editingOutlet.address || ''} onChange={e => setEditingOutlet({...editingOutlet, address: e.target.value})} placeholder="Адрес" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-                          <select value={editingOutlet.ownerUid} onChange={e => setEditingOutlet({...editingOutlet, ownerUid: e.target.value})} className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                          <input type="text" value={editingOutlet.address || ''} onChange={e => setEditingOutlet({ ...editingOutlet, address: e.target.value })} placeholder="Адрес" className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                          <select value={editingOutlet.ownerUid} onChange={e => setEditingOutlet({ ...editingOutlet, ownerUid: e.target.value })} className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/50">
                             <option value="">Выберите владельца</option>
                             {adminUsers.map(u => <option key={u.id} value={u.uid || u.id}>{u.email}</option>)}
                           </select>

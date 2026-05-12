@@ -12,13 +12,12 @@ const AdminLogin = () => {
   
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const performLogin = async (loginEmail, loginPassword) => {
     setError('');
     setIsLoading(true);
 
     try {
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const userCred = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       const user = userCred.user;
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -47,7 +46,6 @@ const AdminLogin = () => {
       }
     } catch (err) {
       console.error(err);
-      // Обрабатываем частые ошибки
       if (err.code === 'auth/invalid-credential') {
         setError('Неверный email или пароль');
       } else {
@@ -56,6 +54,15 @@ const AdminLogin = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    performLogin(email, password);
+  };
+
+  const handleDemoLogin = () => {
+    performLogin('demo@hookabase.com', 'hookabase2026');
   };
 
   return (
@@ -104,11 +111,30 @@ const AdminLogin = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-sm transition-colors mt-4 disabled:bg-blue-300"
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl shadow-sm transition-colors mt-4 disabled:bg-slate-300"
           >
-            {isLoading ? 'Вход...' : 'Войти'}
+            {isLoading ? 'Вход...' : 'Войти в свой аккаунт'}
           </button>
         </form>
+
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">или</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleDemoLogin}
+            disabled={isLoading}
+            className="w-full mt-6 bg-blue-50 hover:bg-blue-100 text-blue-600 font-black py-3 rounded-xl shadow-sm border border-blue-200 transition-colors disabled:opacity-50"
+          >
+            🚀 Попробовать Демо-доступ
+          </button>
+        </div>
 
       </div>
     </div>

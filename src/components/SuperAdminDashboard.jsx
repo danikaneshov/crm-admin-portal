@@ -130,6 +130,54 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const seedDemoData = async () => {
+    if (!window.confirm('Сгенерировать тестовые данные для Демо? (создаст точку, сотрудников и смены)')) return;
+    try {
+      const demoUserUid = prompt('Введите UID пользователя demo@hookabase.com:');
+      if (!demoUserUid) return;
+
+      const demoOutletRef = await addDoc(collection(db, 'outlets'), {
+        ownerUid: demoUserUid,
+        slug: 'demo',
+        name: 'Демо Lounge',
+        address: 'ул. Абая 10, Алматы',
+        connectCode: 'DEMO00',
+        createdAt: new Date(),
+        settings: { baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500 }
+      });
+      const oid = demoOutletRef.id;
+
+      const emps = [{ name: 'Алихан', pin: '1111' }, { name: 'Марат', pin: '2222' }, { name: 'Динара', pin: '3333' }];
+      const empIds = [];
+      for (const e of emps) {
+        const ref = await addDoc(collection(db, 'employees'), { outletId: oid, name: e.name, pin: e.pin, createdAt: new Date() });
+        empIds.push(ref.id);
+      }
+
+      for (let i = 14; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+        const hookahs = Math.floor(Math.random() * 20) + 10;
+        await addDoc(collection(db, 'sales'), {
+          outletId: oid,
+          employeeId: empIds[i % 3],
+          partnerId: '',
+          dateStr,
+          totalItems: hookahs,
+          earned: hookahs * 1500 + 3000,
+          status: 'closed',
+          endTime: new Date(d.setHours(23, 59, 59))
+        });
+      }
+
+      pushToast('Демо-данные успешно созданы!', 'success');
+    } catch(e) {
+      console.error(e);
+      pushToast(`Ошибка: ${e.message}`, 'error');
+    }
+  };
+
   const runMigration = async () => {
     if (!window.confirm('Привязать старые данные к точке?')) return;
     const oid = prompt('ID точки:');

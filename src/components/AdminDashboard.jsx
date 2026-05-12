@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus, KeyRound, Copy, Check } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { signOut } from 'firebase/auth';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs, where, updateDoc, deleteField } from 'firebase/firestore';
+import { collection, addDoc as fbAddDoc, onSnapshot, query, orderBy, deleteDoc as fbDeleteDoc, doc, serverTimestamp, setDoc as fbSetDoc, getDocs, where, updateDoc as fbUpdateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import * as XLSX from 'xlsx';
 import { Card } from './ui/Card';
@@ -19,6 +19,25 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const currentOutlet = outlets.find(o => o.slug === company_slug);
   const currentOutletId = currentOutlet ? currentOutlet.id : null;
+  const isDemo = currentOutlet?.slug === 'demo';
+
+  // Demo Read-Only Interceptors
+  const addDoc = async (...args) => {
+    if (isDemo) { alert("В демо-режиме сохранение отключено."); return { id: 'demo-' + Date.now() }; }
+    return fbAddDoc(...args);
+  };
+  const updateDoc = async (...args) => {
+    if (isDemo) { alert("В демо-режиме сохранение отключено."); return; }
+    return fbUpdateDoc(...args);
+  };
+  const setDoc = async (...args) => {
+    if (isDemo) { alert("В демо-режиме сохранение отключено."); return; }
+    return fbSetDoc(...args);
+  };
+  const deleteDoc = async (...args) => {
+    if (isDemo) { alert("В демо-режиме удаление отключено."); return; }
+    return fbDeleteDoc(...args);
+  };
 
   const [outletSettings, setOutletSettings] = useState({
     baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500,

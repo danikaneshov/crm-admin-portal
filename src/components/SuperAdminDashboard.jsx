@@ -1,9 +1,16 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, addDoc, setDoc, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { db, auth, FIREBASE_API_KEY } from '../firebase';
 import { signOut } from 'firebase/auth';
-import { LogOut, Database, Plus, Shield, Store, Users, Copy, Check, ExternalLink, UserPlus, Building, Loader2 } from 'lucide-react';
+import { LogOut, Database, Plus, Shield, Store, Users, Copy, Check, ExternalLink, UserPlus, Building, Loader2, KeyRound, RefreshCw } from 'lucide-react';
 import { Card } from './ui/Card';
+
+const generateConnectCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+};
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
   <Card className="p-5 border border-slate-100 shadow-sm">
@@ -109,6 +116,7 @@ const SuperAdminDashboard = () => {
         slug: newOutlet.slug,
         name: newOutlet.name,
         address: newOutlet.address,
+        connectCode: generateConnectCode(),
         createdAt: new Date().toISOString(),
         settings: { baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500 }
       });
@@ -335,7 +343,6 @@ const SuperAdminDashboard = () => {
                 <p className="text-slate-500 text-center py-16">Нет активных точек</p>
               ) : outlets.map((o) => {
                 const owner = users.find((u) => (u.uid || u.id) === o.ownerUid);
-                const url = `${baseUrl}${o.slug}`;
                 return (
                   <div key={o.id} className="p-5 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-slate-50 transition-colors">
                     <div className="flex items-center gap-4">
@@ -344,7 +351,7 @@ const SuperAdminDashboard = () => {
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 text-sm">{o.name || 'Без названия'}</p>
-                        <div className="flex gap-2 mt-1">
+                        <div className="flex flex-wrap gap-2 mt-1">
                           <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-full">/{o.slug}</span>
                           {o.address && <span className="text-xs text-slate-500 truncate max-w-[200px]">{o.address}</span>}
                         </div>
@@ -352,22 +359,39 @@ const SuperAdminDashboard = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-500">{owner ? owner.email : 'Нет владельца'}</span>
+                      {/* Connect Code — ключ подключения для employee-app */}
                       <button
-                        title={url}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg text-xs font-medium transition-all"
+                        title={`Ключ подключения: ${o.connectCode || 'не задан'}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold transition-all"
                         onClick={() => {
-                          navigator.clipboard.writeText(url);
-                          setCopiedSlug(o.id);
-                          pushToast('Ссылка скопирована', 'success');
-                          setTimeout(() => setCopiedSlug(null), 1500);
+                          if (o.connectCode) {
+                            navigator.clipboard.writeText(o.connectCode);
+                            setCopiedSlug(o.id);
+                            pushToast('Ключ скопирован: ' + o.connectCode, 'success');
+                            setTimeout(() => setCopiedSlug(null), 1500);
+                          } else {
+                            pushToast('Ключ не задан, перегенерируйте', 'error');
+                          }
                         }}
                       >
-                        {copiedSlug === o.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                        <span className="hidden sm:inline truncate max-w-[140px]">{o.slug}</span>
+                        {copiedSlug === o.id ? <Check size={14} className="text-emerald-500" /> : <KeyRound size={14} />}
+                        <span className="font-mono tracking-wider">{o.connectCode || '------'}</span>
                       </button>
-                      <a className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all" href={url} target="_blank" rel="noreferrer">
-                        <ExternalLink size={16} />
-                      </a>
+                      <button
+                        title="Перегенерировать ключ"
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"
+                        onClick={async () => {
+                          if (!window.confirm('Перегенерировать ключ подключения? Старый ключ перестанет работать.')) return;
+                          try {
+                            await updateDoc(doc(db, 'outlets', o.id), { connectCode: generateConnectCode() });
+                            pushToast('Ключ обновлён', 'success');
+                          } catch (e) {
+                            pushToast('Ошибка: ' + e.message, 'error');
+                          }
+                        }}
+                      >
+                        <RefreshCw size={15} />
+                      </button>
                     </div>
                   </div>
                 );

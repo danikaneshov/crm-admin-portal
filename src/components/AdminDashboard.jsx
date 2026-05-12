@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus } from 'lucide-react';
+import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus, KeyRound, Copy, Check } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { signOut } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs, where, updateDoc, deleteField } from 'firebase/firestore';
@@ -41,6 +41,7 @@ const AdminDashboard = () => {
   const [savingBaseSalaryEmpId, setSavingBaseSalaryEmpId] = useState(null);
   const commissionSaveTimersRef = useRef({});
   const baseSalarySaveTimersRef = useRef({});
+  const [copiedConnectCode, setCopiedConnectCode] = useState(false);
 
   const [selectedEmpReport, setSelectedEmpReport] = useState(null);
 
@@ -655,10 +656,17 @@ const AdminDashboard = () => {
                     ))}
                   </div>
                 )}
-                {currentOutletId && (
-                  <a href={`/${currentOutlet?.slug}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:-translate-y-0.5 text-sm whitespace-nowrap">
-                    Открыть терминал
-                  </a>
+                {currentOutletId && currentOutlet?.connectCode && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(currentOutlet.connectCode);
+                      setCopiedConnectCode(true);
+                      setTimeout(() => setCopiedConnectCode(false), 2000);
+                    }}
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:-translate-y-0.5 text-sm whitespace-nowrap"
+                  >
+                    {copiedConnectCode ? <><Check size={16}/> Скопировано</> : <><KeyRound size={16}/> Ключ: <span className="font-mono tracking-wider">{currentOutlet.connectCode}</span></>}
+                  </button>
                 )}
               </div>
             </div>
@@ -1529,135 +1537,113 @@ const AdminDashboard = () => {
             </div>
 
             {subTab === 'employees' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm h-fit">
-              <h2 className="text-xl font-black mb-6">Добавить мастера</h2>
-              <form onSubmit={handleAddEmployee} className="space-y-4">
-                <input type="text" value={newEmpName} onChange={e=>setNewEmpName(e.target.value)} placeholder="Имя мастера" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" required />
-                <div className="flex gap-2"><input type="text" maxLength="4" value={newEmpPin} onChange={e=>setNewEmpPin(e.target.value.replace(/\D/g, ''))} placeholder="PIN" className="w-full p-4 bg-slate-50 rounded-2xl border-none text-center font-mono font-bold" required /><button type="button" onClick={generatePin} className="p-4 bg-slate-100 rounded-2xl"><Key size={20}/></button></div>
-                <button type="submit" disabled={isAdding || !newEmpName || newEmpPin.length !== 4} className="w-full p-4 bg-blue-600 text-white rounded-2xl font-bold disabled:bg-blue-300">Создать аккаунт</button>
+          <div className="space-y-6">
+            {/* Добавить мастера */}
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm max-w-lg">
+              <h2 className="text-lg font-black mb-4">Добавить мастера</h2>
+              <form onSubmit={handleAddEmployee} className="flex flex-wrap gap-3 items-end">
+                <input type="text" value={newEmpName} onChange={e=>setNewEmpName(e.target.value)} placeholder="Имя мастера" className="flex-1 min-w-[160px] p-3.5 bg-slate-50 rounded-xl border-none font-bold text-sm" required />
+                <div className="flex gap-2">
+                  <input type="text" maxLength="4" value={newEmpPin} onChange={e=>setNewEmpPin(e.target.value.replace(/\D/g, ''))} placeholder="PIN" className="w-24 p-3.5 bg-slate-50 rounded-xl border-none text-center font-mono font-bold text-sm" required />
+                  <button type="button" onClick={generatePin} className="p-3.5 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"><Key size={18}/></button>
+                </div>
+                <button type="submit" disabled={isAdding || !newEmpName || newEmpPin.length !== 4} className="px-6 p-3.5 bg-blue-600 text-white rounded-xl font-bold text-sm disabled:bg-blue-300 hover:bg-blue-500 transition-colors">Добавить</button>
               </form>
             </div>
-            <div className="col-span-1 lg:col-span-2 bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-              <div className="lg:hidden divide-y divide-slate-100">
-                {employees.map((emp) => {
-                  const persistedValue = emp.customItemCommission ?? outletSettings.itemCommission;
-                  const draftRaw = commissionDrafts[emp.id];
-                  const inputValue = draftRaw ?? String(persistedValue);
+
+            {/* Список сотрудников — карточки */}
+            {employees.length === 0 ? (
+              <div className="bg-white p-12 rounded-[32px] border border-slate-100 shadow-sm text-center text-slate-400">Нет сотрудников</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {employees.map(emp => {
+                  const hookahRate = emp.customItemCommission ?? outletSettings.itemCommission;
+                  const replacementRate = emp.customReplacementCommission ?? outletSettings.partnerItemCommission;
+                  const baseSalary = emp.customBaseSalary != null ? emp.customBaseSalary : outletSettings.baseSalary;
                   return (
-                    <div key={emp.id} className="p-4">
-                      <div className="flex items-start justify-between gap-3 mb-3">
+                    <div key={emp.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                      {/* Header */}
+                      <div className="p-5 border-b border-slate-50 flex justify-between items-center">
                         <div>
-                          <p className="font-bold text-slate-900">{emp.name}</p>
-                          <p className="text-xs text-slate-400 font-mono">PIN: {emp.pin}</p>
+                          <p className="font-black text-slate-900 text-base">{emp.name}</p>
+                          <p className="text-xs text-slate-400 font-mono mt-0.5">PIN: {emp.pin}</p>
                         </div>
-                        <button onClick={() => { if (window.confirm(`Удалить сотрудника ${emp.name}? Это необратимо.`)) deleteDoc(doc(db, 'employees', emp.id)); }} className="text-slate-300 hover:text-red-500">
-                          <Trash2 size={18}/>
+                        <button onClick={() => { if (window.confirm(`Удалить сотрудника ${emp.name}?`)) deleteDoc(doc(db, 'employees', emp.id)); }} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                          <Trash2 size={16}/>
                         </button>
                       </div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Базовый оклад (₸)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder={String(outletSettings.baseSalary)}
-                        value={baseSalaryDrafts[emp.id] ?? (emp.customBaseSalary != null ? String(emp.customBaseSalary) : '')}
-                        onChange={(e) => handleBaseSalaryDraftChange(emp.id, e.target.value)}
-                        onBlur={() => commitBaseSalaryField(emp)}
-                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-                      />
-                      {savingBaseSalaryEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mb-2">Сохранение...</p>}
-                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Ставка за кальян (₸)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={inputValue}
-                        onChange={(e) => handleCommissionDraftChange(emp.id, e.target.value)}
-                        onBlur={() => {
-                          const parsed = Number(inputValue || 0);
-                          if (parsed === persistedValue) return;
-                          const shouldSave = window.confirm(`Сохранить ставку ${parsed} ₸ для ${emp.name}?`);
-                          if (!shouldSave) {
-                            setCommissionDrafts((prev) => ({ ...prev, [emp.id]: String(persistedValue) }));
-                            return;
-                          }
-                          queueCommissionSave(emp.id, parsed);
-                        }}
-                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      {savingCommissionEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-2">Сохранение...</p>}
+                      {/* Fields */}
+                      <div className="p-5 space-y-3">
+                        {/* Базовый оклад */}
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Оклад за смену (₸)</label>
+                          <input
+                            type="number" min="0"
+                            placeholder={String(outletSettings.baseSalary)}
+                            value={baseSalaryDrafts[emp.id] ?? (emp.customBaseSalary != null ? String(emp.customBaseSalary) : '')}
+                            onChange={(e) => handleBaseSalaryDraftChange(emp.id, e.target.value)}
+                            onBlur={() => commitBaseSalaryField(emp)}
+                            className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                          {savingBaseSalaryEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
+                        </div>
+                        {/* Ставка за кальян */}
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ставка за кальян (₸)</label>
+                          <input
+                            type="number" min="0"
+                            value={commissionDrafts[emp.id] ?? String(hookahRate)}
+                            onChange={(e) => handleCommissionDraftChange(emp.id, e.target.value)}
+                            onBlur={() => {
+                              const val = Number(commissionDrafts[emp.id] ?? hookahRate);
+                              if (val === hookahRate) return;
+                              if (!window.confirm(`Сохранить ставку за кальян ${val} ₸ для ${emp.name}?`)) {
+                                setCommissionDrafts(prev => ({ ...prev, [emp.id]: String(hookahRate) }));
+                                return;
+                              }
+                              queueCommissionSave(emp.id, val);
+                            }}
+                            className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                          {savingCommissionEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
+                        </div>
+                        {/* Ставка за замену */}
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ставка за замену (₸)</label>
+                          <input
+                            type="number" min="0"
+                            placeholder={String(outletSettings.partnerItemCommission)}
+                            defaultValue={emp.customReplacementCommission != null ? emp.customReplacementCommission : ''}
+                            onBlur={async (e) => {
+                              const raw = e.target.value.trim();
+                              if (raw === '' && emp.customReplacementCommission == null) return;
+                              if (raw === '' ) {
+                                if (!window.confirm(`Сбросить ставку за замену для ${emp.name}?`)) { e.target.value = String(emp.customReplacementCommission); return; }
+                                await updateDoc(doc(db, 'employees', emp.id), { customReplacementCommission: deleteField() });
+                                return;
+                              }
+                              const val = Number(raw);
+                              if (Number.isNaN(val) || val === emp.customReplacementCommission) return;
+                              if (!window.confirm(`Сохранить ставку за замену ${val} ₸ для ${emp.name}?`)) { e.target.value = emp.customReplacementCommission != null ? String(emp.customReplacementCommission) : ''; return; }
+                              await updateDoc(doc(db, 'employees', emp.id), { customReplacementCommission: val });
+                            }}
+                            className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                        </div>
+                      </div>
+                      {/* Footer summary */}
+                      <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex gap-3 text-[10px] font-bold text-slate-500 uppercase">
+                        <span>Оклад: {formatMoney(baseSalary)}₸</span>
+                        <span>•</span>
+                        <span>Кальян: {formatMoney(hookahRate)}₸</span>
+                        <span>•</span>
+                        <span>Замена: {formatMoney(replacementRate)}₸</span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-
-              <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full min-w-[960px]">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Мастер</th>
-                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">PIN</th>
-                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Базовый оклад (₸)</th>
-                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Ставка за кальян (₸)</th>
-                    <th className="p-6"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {employees.map(emp => (
-                    <tr key={emp.id}>
-                      <td className="p-6 font-bold text-slate-900">{emp.name}</td>
-                      <td className="p-6 font-mono text-slate-500">{emp.pin}</td>
-                      <td className="p-6">
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder={String(outletSettings.baseSalary)}
-                          value={baseSalaryDrafts[emp.id] ?? (emp.customBaseSalary != null ? String(emp.customBaseSalary) : '')}
-                          onChange={(e) => handleBaseSalaryDraftChange(emp.id, e.target.value)}
-                          onBlur={() => commitBaseSalaryField(emp)}
-                          className="w-36 p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {savingBaseSalaryEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
-                      </td>
-                      <td className="p-6">
-                        {(() => {
-                          const persistedValue = emp.customItemCommission ?? outletSettings.itemCommission;
-                          const draftRaw = commissionDrafts[emp.id];
-                          const inputValue = draftRaw ?? String(persistedValue);
-                          return (
-                        <input
-                          type="number"
-                          min="0"
-                          value={inputValue}
-                          onChange={(e) => {
-                            handleCommissionDraftChange(emp.id, e.target.value);
-                          }}
-                          onBlur={() => {
-                            const parsed = Number(inputValue || 0);
-                            if (parsed === persistedValue) return;
-                            const shouldSave = window.confirm(`Сохранить ставку ${parsed} ₸ для ${emp.name}?`);
-                            if (!shouldSave) {
-                              setCommissionDrafts((prev) => ({ ...prev, [emp.id]: String(persistedValue) }));
-                              return;
-                            }
-                            queueCommissionSave(emp.id, parsed);
-                          }}
-                          className="w-44 p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                          );
-                        })()}
-                        {savingCommissionEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
-                      </td>
-                      <td className="p-6 text-right">
-                        <button onClick={() => { if (window.confirm(`Удалить сотрудника ${emp.name}? Это необратимо.`)) deleteDoc(doc(db, 'employees', emp.id)); }} className="text-slate-300 hover:text-red-500">
-                          <Trash2 size={18}/>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </div>
+            )}
           </div>
             )}
 
